@@ -7,7 +7,7 @@ class Replication {
     }
 
     // Elects a leader among the replicas.
-    electLeader() {
+    async electLeader() {
         // Sort replicas by ID
         this.replicas.sort((a, b) => a.id - b.id);
 
@@ -15,7 +15,7 @@ class Replication {
         this.leader = this.replicas[0];
 
         // Notify all replicas of new leader
-        this.replicas.forEach(replica => replica.notifyLeader(this.leader));
+        await Promise.all(this.replicas.map(replica => replica.notifyLeader(this.leader)));
 
         // Start heartbeat loop
         setInterval(() => {
@@ -44,17 +44,18 @@ class Replication {
     }
 
     // Sends data to the leader for replication.
-    sendData(data) {
+    async sendData(data) {
         this.messageQueue.push(data);
+        await this.leader.replicateData(data);
     }
 
     // Removes a replica from the replication group.
-    removeReplica(replica) {
+    async removeReplica(replica) {
         const index = this.replicas.indexOf(replica);
         if (index !== -1) {
             this.replicas.splice(index, 1);
             if (this.leader === replica) {
-                this.electLeader();
+                await this.electLeader();
             }
         }
     }
@@ -65,18 +66,18 @@ class Replication {
             await replica.checkHeartbeat();
         } catch (error) {
             console.error(`Failed to send heartbeat to replica ${replica.id}: ${error.message}`);
-            this.removeReplica(replica);
+            await this.removeReplica(replica);
         }
     }
 
     // Handles a network partition by electing a new leader among the replicas that can communicate with each other.
-    handleNetworkPartition() {
+    async handleNetworkPartition() {
         const groups = this.groupReplicasByNetwork();
         const largestGroup = groups.reduce((a, b) => a.length > b.length ? a : b);
         const newLeader = largestGroup[0];
         if (newLeader !== this.leader) {
             this.leader = newLeader;
-            this.replicas.forEach(replica => replica.notifyLeader(this.leader));
+            await Promise.all(this.replicas.map(replica => replica.notifyLeader(this.leader)));
         }
     }
 
@@ -119,10 +120,11 @@ class Replica {
         this.leader = null;
         this.lastHeartbeat = Date.now();
         this.lastData = null;
+        this.dataCache = new Map();
     }
 
     // Notifies the replica of the new leader.
-    notifyLeader(leader) {
+    async notifyLeader(leader) {
         this.leader = leader;
     }
 
@@ -137,6 +139,23 @@ class Replica {
     // Receives data from the leader for replication.
     receiveData(data) {
         this.lastData = data;
+    }
+
+    // Replicates data to the local log.
+    async replicateData(data) {
+        this.dataCache.set(data.id, data);
+        // TODO: Write data to local log
+    }
+
+    // Retrieves data from the local cache or log.
+    async getData(id) {
+        let data = this.dataCache.get(id);
+        if (!data) {
+            // TODO: Read data from local log or external storage
+            // Cache data to reduce future requests
+            this.dataCache.set(id, data);
+        }
+        return data;
     }
 }
 
