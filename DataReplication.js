@@ -1,9 +1,10 @@
 // Data replication
 class Replication {
-    constructor() {
+    constructor(storage) {
         this.replicas = [];
         this.leader = null;
         this.messageQueue = [];
+        this.storage = storage;
     }
 
     // Elects a leader among the replicas.
@@ -115,12 +116,13 @@ class Replication {
 }
 
 class Replica {
-    constructor(id) {
+    constructor(id, storage) {
         this.id = id;
         this.leader = null;
         this.lastHeartbeat = Date.now();
         this.lastData = null;
         this.dataCache = new Map();
+        this.storage = storage;
     }
 
     // Notifies the replica of the new leader.
@@ -132,7 +134,7 @@ class Replica {
     async checkHeartbeat() {
         const now = Date.now();
         if (now - this.lastHeartbeat > 5000) {
-            this.leader.removeReplica(this);
+            await this.leader.removeReplica(this);
         }
     }
 
@@ -144,16 +146,17 @@ class Replica {
     // Replicates data to the local log.
     async replicateData(data) {
         this.dataCache.set(data.id, data);
-        // TODO: Write data to local log
+        await this.storage.writeLog(data);
     }
 
     // Retrieves data from the local cache or log.
     async getData(id) {
         let data = this.dataCache.get(id);
         if (!data) {
-            // TODO: Read data from local log or external storage
-            // Cache data to reduce future requests
-            this.dataCache.set(id, data);
+            data = await this.storage.readData(id);
+            if (data) {
+                this.dataCache.set(id, data);
+            }
         }
         return data;
     }
@@ -161,27 +164,67 @@ class Replica {
     // Recovers from a failure by resyncing with the leader.
     async recover() {
         const leaderData = await this.leader.getData();
+        await this.storage.writeSnapshot(leaderData);
         this.dataCache = new Map(leaderData);
     }
 }
 
-// Main function
-function main() {
-    const replication = new Replication();
+class Storage {
+    constructor() {
+        this.log = [];
+        this.snapshot = null;
+    }
+
+    async writeLog(data) {
+        this.log.push(data);
+        // TODO: Write data to durable storage
+    }
+
+    async readData(id) {
+        let data = null;
+        // TODO: Read data from durable storage
+        if (data) {
+            this.log.push(data);
+        }
+        return data;
+    }
+
+    async writeSnapshot(data) {
+        this.snapshot = data;
+        // TODO: Write snapshot to durable storage
+    }
+
+    async readSnapshot() {
+        let data = null;
+        // TODO: Read snapshot from durable storage
+        if (data) {
+            this.snapshot = data;
+        }
+        return data;
+    }
+}
+
+// Main function for data replication
+async function main() {
+    // Create storage instance
+    const storage = new Storage();
 
     // Create replicas
-    const replica1 = new Replica(1);
-    const replica2 = new Replica(2);
-    const replica3 = new Replica(3);
+    const replica1 = new Replica(1, storage);
+    const replica2 = new Replica(2, storage);
+    const replica3 = new Replica(3, storage);
 
-    // Add replicas to replication
+    // Create replication instance
+    const replication = new Replication(storage);
+
+    // Add replicas to replication instance
     replication.replicas.push(replica1, replica2, replica3);
 
     // Elect leader
-    replication.electLeader();
+    await replication.electLeader();
 
     // Send data to leader for replication
-    replication.sendData("Data to be replicated");
+    await replication.sendData({id: 1, data: "example data"});
 }
 
 // Call main function
