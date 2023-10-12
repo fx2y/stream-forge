@@ -6,24 +6,26 @@ class Replication {
         this.messageQueue = [];
     }
 
-    // Subtask 1: Implement a consensus algorithm that ensures all replicas of a partition have the same data in the same order.
+    // Elects a leader among the replicas.
     electLeader() {
         // Sort replicas by ID
         this.replicas.sort((a, b) => a.id - b.id);
 
-        // Elect replica with lowest ID as leader
+        // Elect replica with the lowest ID as leader
         this.leader = this.replicas[0];
 
         // Notify all replicas of new leader
         this.replicas.forEach(replica => replica.notifyLeader(this.leader));
 
-        // Subtask 2: Implement a protocol for the leader to send heartbeats to the followers to ensure they are still alive.
+        // Start heartbeat loop
         setInterval(() => {
-            this.replicas.forEach(replica => {
-                if (replica !== this.leader) {
-                    replica.checkHeartbeat();
-                }
-            });
+            if (this.leader) {
+                this.replicas.forEach(replica => {
+                    if (replica !== this.leader) {
+                        this.sendHeartbeat(replica);
+                    }
+                });
+            }
         }, 1000);
 
         // Subtask 3: Implement a protocol for the leader to send data to the followers and ensure they have received it.
@@ -45,6 +47,27 @@ class Replication {
     sendData(data) {
         this.messageQueue.push(data);
     }
+
+    // Removes a replica from the replication group.
+    removeReplica(replica) {
+        const index = this.replicas.indexOf(replica);
+        if (index !== -1) {
+            this.replicas.splice(index, 1);
+            if (this.leader === replica) {
+                this.electLeader();
+            }
+        }
+    }
+
+    // Sends a heartbeat to a replica to ensure it is still alive.
+    async sendHeartbeat(replica) {
+        try {
+            await replica.checkHeartbeat();
+        } catch (error) {
+            console.error(`Failed to send heartbeat to replica ${replica.id}: ${error.message}`);
+            this.removeReplica(replica);
+        }
+    }
 }
 
 class Replica {
@@ -61,10 +84,10 @@ class Replica {
     }
 
     // Checks if the replica has received a heartbeat from the leader recently.
-    checkHeartbeat() {
+    async checkHeartbeat() {
         const now = Date.now();
         if (now - this.lastHeartbeat > 5000) {
-            this.leader = null;
+            this.leader.removeReplica(this);
         }
     }
 
