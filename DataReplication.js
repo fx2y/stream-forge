@@ -5,7 +5,7 @@ class Replication {
         this.leader = null;
     }
 
-    // Elects a leader among the replicas.
+    // Subtask 1: Implement a consensus algorithm that ensures all replicas of a partition have the same data in the same order.
     electLeader() {
         // Sort replicas by ID
         this.replicas.sort((a, b) => a.id - b.id);
@@ -15,6 +15,15 @@ class Replication {
 
         // Notify all replicas of new leader
         this.replicas.forEach(replica => replica.notifyLeader(this.leader));
+
+        // Subtask 2: Implement a protocol for the leader to send heartbeats to the followers to ensure they are still alive.
+        setInterval(() => {
+            this.replicas.forEach(replica => {
+                if (replica !== this.leader) {
+                    replica.checkHeartbeat();
+                }
+            });
+        }, 1000);
     }
 }
 
@@ -22,11 +31,20 @@ class Replica {
     constructor(id) {
         this.id = id;
         this.leader = null;
+        this.lastHeartbeat = Date.now();
     }
 
-// Notifies the replica of the new leader.
+    // Notifies the replica of the new leader.
     notifyLeader(leader) {
         this.leader = leader;
+    }
+
+    // Checks if the replica has received a heartbeat from the leader recently.
+    checkHeartbeat() {
+        const now = Date.now();
+        if (now - this.lastHeartbeat > 5000) {
+            this.leader = null;
+        }
     }
 }
 
