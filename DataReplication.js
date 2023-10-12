@@ -68,6 +68,49 @@ class Replication {
             this.removeReplica(replica);
         }
     }
+
+    // Handles a network partition by electing a new leader among the replicas that can communicate with each other.
+    handleNetworkPartition() {
+        const groups = this.groupReplicasByNetwork();
+        const largestGroup = groups.reduce((a, b) => a.length > b.length ? a : b);
+        const newLeader = largestGroup[0];
+        if (newLeader !== this.leader) {
+            this.leader = newLeader;
+            this.replicas.forEach(replica => replica.notifyLeader(this.leader));
+        }
+    }
+
+    // Groups replicas by network based on their ability to communicate with each other.
+    groupReplicasByNetwork() {
+        const groups = [];
+        const visited = new Set();
+        this.replicas.forEach(replica => {
+            if (!visited.has(replica)) {
+                const group = this.findReplicaGroup(replica, visited);
+                groups.push(group);
+            }
+        });
+        return groups;
+    }
+
+    // Finds the group of replicas that can communicate with the given replica.
+    findReplicaGroup(replica, visited) {
+        const group = [replica];
+        visited.add(replica);
+        this.replicas.forEach(other => {
+            if (!visited.has(other) && this.canCommunicate(replica, other)) {
+                const otherGroup = this.findReplicaGroup(other, visited);
+                group.push(...otherGroup);
+            }
+        });
+        return group;
+    }
+
+    // Checks if two replicas can communicate with each other.
+    canCommunicate(replica1, replica2) {
+        // TODO: Implement network communication check
+        return true;
+    }
 }
 
 class Replica {
