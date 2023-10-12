@@ -157,6 +157,12 @@ class Replica {
         }
         return data;
     }
+
+    // Recovers from a failure by resyncing with the leader.
+    async recover() {
+        const leaderData = await this.leader.getData();
+        this.dataCache = new Map(leaderData);
+    }
 }
 
 // Main function
